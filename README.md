@@ -2,7 +2,7 @@
 
 Generic local OIDC provider for development and testing.
 
-Backed by [oauth2-mock-server](https://github.com/axa-group/oauth2-mock-server). It is
+Built on [oauth2-mock-server](https://github.com/axa-group/oauth2-mock-server). It is
 intended to let local applications exercise their normal OIDC authorization-code callback
 flow without depending on a real identity provider account.
 
