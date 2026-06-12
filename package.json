@@ -1,6 +1,6 @@
 {
   "name": "@transformteamsg/mock-oidc-provider",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Local OIDC provider for development and testing.",
   "license": "MIT",
   "keywords": [
