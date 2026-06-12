@@ -181,3 +181,92 @@ describe('local OIDC provider', () => {
 function pkceChallenge(codeVerifier: string): string {
   return createHash('sha256').update(codeVerifier).digest('base64url');
 }
+
+describe('azure-ad preset', () => {
+  const provider = createProvider({
+    host: '127.0.0.1',
+    port: 0,
+    issuer: 'http://127.0.0.1:0',
+    clientId: 'mock-oidc-client',
+    redirectUris: ['http://localhost:3000/api/auth/callback/mims'],
+    claims: {
+      sub: 'student-1',
+      customClaim1: 'value1',
+      tid: 'test-tenant',
+      oid: '00000000-0000-0000-0000-000000000001',
+    },
+    preset: 'azure-ad',
+    tenantId: 'test-tenant',
+  });
+
+  let baseUrl: string;
+  let tenantIssuer: string;
+
+  beforeAll(async () => {
+    const started = await provider.start();
+    tenantIssuer = started.issuer;
+    baseUrl = new URL(tenantIssuer).origin;
+  });
+
+  afterAll(async () => {
+    await provider.stop();
+  });
+
+  it('returns the tenant-shaped issuer URL', () => {
+    expect(tenantIssuer).toMatch(/\/test-tenant\/v2\.0$/);
+  });
+
+  it('serves discovery at the tenant-shaped path with correct metadata', async () => {
+    const discovery = await fetch(`${tenantIssuer}/.well-known/openid-configuration`).then((res) => res.json());
+
+    expect(discovery.issuer).toBe(tenantIssuer);
+    expect(discovery.authorization_endpoint).toBe(`${baseUrl}/authorize`);
+    expect(discovery.token_endpoint).toBe(`${baseUrl}/token`);
+    expect(discovery.jwks_uri).toBe(`${baseUrl}/test-tenant/discovery/v2.0/keys`);
+    expect(discovery.response_types_supported).toContain('code');
+    expect(discovery.code_challenge_methods_supported).toContain('S256');
+  });
+
+  it('serves JWKS at the tenant-shaped path', async () => {
+    const jwks = await fetch(`${baseUrl}/test-tenant/discovery/v2.0/keys`).then((res) => res.json());
+
+    expect(jwks.keys).toHaveLength(1);
+    expect(jwks.keys[0].kid).toBeTruthy();
+  });
+
+  it('issues a token containing Azure AD claims through the authorization code flow', async () => {
+    const redirectUri = 'http://localhost:3000/api/auth/callback/mims';
+    const authorizeUrl = new URL(`${baseUrl}/authorize`);
+    authorizeUrl.searchParams.set('response_type', 'code');
+    authorizeUrl.searchParams.set('client_id', 'mock-oidc-client');
+    authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+    authorizeUrl.searchParams.set('scope', 'openid profile email');
+    authorizeUrl.searchParams.set('state', 'state-123');
+
+    const authorizeResponse = await fetch(authorizeUrl, { redirect: 'manual' });
+    expect(authorizeResponse.status).toBe(302);
+    const callback = new URL(authorizeResponse.headers.get('location')!);
+    const code = callback.searchParams.get('code')!;
+
+    const tokenResponse = await fetch(`${baseUrl}/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: 'mock-oidc-client',
+        redirect_uri: redirectUri,
+      }),
+    }).then((res) => res.json());
+
+    const jwks = createRemoteJWKSet(new URL(`${baseUrl}/test-tenant/discovery/v2.0/keys`));
+    const verified = await jwtVerify(tokenResponse.id_token, jwks, {
+      issuer: tenantIssuer,
+      audience: 'mock-oidc-client',
+    });
+
+    expect(verified.payload.tid).toBe('test-tenant');
+    expect(verified.payload.oid).toBe('00000000-0000-0000-0000-000000000001');
+    expect(verified.payload.customClaim1).toBe('value1');
+  });
+});

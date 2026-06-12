@@ -5,6 +5,8 @@ export interface ProviderConfig {
   clientId: string;
   redirectUris: string[];
   claims: Record<string, unknown>;
+  preset?: 'azure-ad';
+  tenantId: string;
 }
 
 const defaultHost = '127.0.0.1';
@@ -21,6 +23,8 @@ export function parseArgs(args: string[]): ProviderConfig {
   let port = defaultPort;
   let clientId = defaultClientId;
   let issuer: string | undefined;
+  let preset: 'azure-ad' | undefined;
+  let tenantId = 'mock-tenant';
   const redirectUris = ['http://localhost:3000/api/auth/callback/oidc'];
   const claims = { ...defaultClaims };
 
@@ -61,6 +65,20 @@ export function parseArgs(args: string[]): ProviderConfig {
       continue;
     }
 
+    if (arg === '--preset') {
+      const value = readValue(args, (index += 1), arg);
+      if (value !== 'azure-ad') {
+        throw new Error(`Unknown preset: ${value}. Supported presets: azure-ad`);
+      }
+      preset = 'azure-ad';
+      continue;
+    }
+
+    if (arg === '--tenant-id') {
+      tenantId = readValue(args, (index += 1), arg);
+      continue;
+    }
+
     if (arg === '--help' || arg === '-h') {
       throw new HelpRequested();
     }
@@ -72,6 +90,16 @@ export function parseArgs(args: string[]): ProviderConfig {
     assertLocalRedirectUri(redirectUri);
   }
 
+  if (preset !== undefined && issuer !== undefined) {
+    throw new Error('--preset and --issuer cannot be used together');
+  }
+
+  if (preset === 'azure-ad') {
+    claims.tid ??= tenantId;
+    claims.oid ??= '00000000-0000-0000-0000-000000000001';
+    claims.preferred_username ??= claims.email ?? 'mock.user@example.test';
+  }
+
   return {
     host,
     port,
@@ -79,6 +107,8 @@ export function parseArgs(args: string[]): ProviderConfig {
     clientId,
     redirectUris: [...new Set(redirectUris)],
     claims,
+    preset,
+    tenantId,
   };
 }
 
@@ -101,6 +131,8 @@ Options:
   --client-id <id>           Client ID. Default: ${defaultClientId}
   --redirect-uri <uri>       Additional allowed localhost redirect URI.
   --claim <key=value>        Add or override an ID token claim. Repeatable.
+  --preset <name>            Apply a provider preset. Supported: azure-ad.
+  --tenant-id <id>           Tenant ID for --preset azure-ad. Default: mock-tenant
   -h, --help                 Show help.
 
 Example:

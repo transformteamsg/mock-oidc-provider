@@ -43,6 +43,25 @@ clientId: mock-oidc-client
 
 The provider prints copy-pasteable client application configuration on startup.
 
+## Azure AD / MSAL
+
+Use `--preset azure-ad` when the consuming app uses `@azure/msal-node` or any MSAL-based client. The preset configures the provider to look like Azure AD so MSAL can talk to it without any custom code in the consuming app.
+
+```bash
+pnpm dlx @transformteamsg/mock-oidc-provider \
+  --preset azure-ad \
+  --client-id mock-oidc-client \
+  --redirect-uri http://localhost:3000/api/auth/callback/mims \
+  --claim customClaim1=value1
+```
+
+What `--preset azure-ad` does:
+
+- Serves an Azure AD-compatible discovery endpoint at `/{tenantId}/v2.0/.well-known/openid-configuration`
+- Injects `tid`, `oid`, and `preferred_username` default claims automatically
+- Allows MSAL (`@azure/msal-node`) to talk to the mock without custom code in the consuming app
+- On startup, prints `MIMS_MOCK_ISSUER=<base URL>` (e.g. `http://localhost:4010`) — set this in your consuming app's env instead of the full issuer URL
+
 ## Options
 
 ```text

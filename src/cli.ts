@@ -20,6 +20,11 @@ async function main(): Promise<void> {
   }
 
   const provider = createProvider(config);
+  if (config.preset === 'azure-ad') {
+    // The azure-ad preset serves HTTPS with a bundled self-signed cert.
+    // Disable cert verification so this process can fetch its own discovery doc.
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  }
   const started = await provider.start();
   const metadata = await fetch(`${started.issuer}/.well-known/openid-configuration`).then((res) => res.json() as Promise<Record<string, string>>);
 
@@ -32,7 +37,12 @@ async function main(): Promise<void> {
   console.log(`JWKS:         ${metadata['jwks_uri']}`);
   console.log('');
   console.log('Example client app env:');
-  console.log(`OIDC_MOCK_ISSUER=${started.issuer}`);
+  if (config.preset === 'azure-ad') {
+    console.log(`MIMS_ISSUER=${started.issuer}`);
+    console.log(`MOCK_MIMS_ENABLED=true`);
+  } else {
+    console.log(`OIDC_MOCK_ISSUER=${started.issuer}`);
+  }
   console.log(`OIDC_CLIENT_ID=${config.clientId}`);
   console.log('');
   console.log('Configured claims:');
