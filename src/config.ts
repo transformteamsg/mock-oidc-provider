@@ -6,7 +6,7 @@ export interface ProviderConfig {
   redirectUris: string[];
   claims: Record<string, unknown>;
   preset?: 'azure-ad';
-  tenantId: string;
+  tenantId?: string;
 }
 
 const defaultHost = '127.0.0.1';

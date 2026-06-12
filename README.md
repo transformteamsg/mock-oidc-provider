@@ -59,8 +59,47 @@ What `--preset azure-ad` does:
 
 - Serves an Azure AD-compatible discovery endpoint at `/{tenantId}/v2.0/.well-known/openid-configuration`
 - Injects `tid`, `oid`, and `preferred_username` default claims automatically
-- Allows MSAL (`@azure/msal-node`) to talk to the mock without custom code in the consuming app
-- On startup, prints `MIMS_MOCK_ISSUER=<base URL>` (e.g. `http://localhost:4010`) — set this in your consuming app's env instead of the full issuer URL
+- Serves HTTPS using a bundled self-signed localhost certificate — required because MSAL unconditionally rejects non-HTTPS authority URIs
+- On startup, prints the exact env vars to copy into your consuming app (`OIDC_ISSUER` and `MOCK_OIDC_ENABLED`)
+
+### Configuring MSAL
+
+When your app uses `@azure/msal-node` with `ConfidentialClientApplication`, branch the config on a `MOCK_OIDC_ENABLED` env flag:
+
+```typescript
+import { ConfidentialClientApplication, ProtocolMode } from '@azure/msal-node';
+
+if (process.env.MOCK_OIDC_ENABLED === 'true') {
+  msalInstance = new ConfidentialClientApplication({
+    auth: {
+      clientId: process.env.CLIENT_ID,
+      authority: process.env.OIDC_ISSUER,
+      knownAuthorities: [new URL(process.env.OIDC_ISSUER!).host], // skip instance discovery for non-Azure host
+      clientSecret: 'mock-secret',
+      protocolMode: ProtocolMode.OIDC, // read expected issuer from discovery doc instead of MSAL's hardcoded login.microsoftonline.com
+    },
+  });
+} else {
+  // production: certificate-based auth
+  msalInstance = new ConfidentialClientApplication({
+    auth: {
+      clientId: process.env.CLIENT_ID,
+      authority: process.env.OIDC_ISSUER,
+      clientCertificate: {
+        thumbprintSha256: process.env.CERT_THUMBPRINT,
+        privateKey: Buffer.from(process.env.PRIVATE_KEY!, 'base64').toString('utf-8'),
+      },
+    },
+  });
+}
+```
+
+Two non-obvious options are required for the mock to work:
+
+- **`knownAuthorities`** — bypasses MSAL's Azure AD instance discovery, which would otherwise reject a `localhost` authority as untrusted
+- **`protocolMode: ProtocolMode.OIDC`** — makes MSAL read the expected `issuer` from the discovery document; without this, MSAL constructs it internally from `login.microsoftonline.com`, which won't match the `iss` claim in mock tokens
+
+Your app also needs to trust the bundled self-signed cert. The simplest approach for local dev is `NODE_TLS_REJECT_UNAUTHORIZED=0` in your `.env` (safe because this only runs locally).
 
 ## Options
 
@@ -71,6 +110,8 @@ What `--preset azure-ad` does:
 --client-id <id>           Client ID. Default: mock-oidc-client
 --redirect-uri <uri>       Additional allowed localhost redirect URI.
 --claim <key=value>        Add or override an ID token claim. Repeatable.
+--preset <name>            Apply a provider preset. Supported: azure-ad.
+--tenant-id <id>           Tenant ID for --preset azure-ad. Default: mock-tenant
 -h, --help                 Show help.
 ```
 

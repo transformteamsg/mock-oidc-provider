@@ -22,7 +22,7 @@ export function createProvider(config: ProviderConfig) {
     if (config.preset === 'azure-ad') {
       // MSAL validates token iss against the discovery doc's issuer field.
       // The discovery doc reports the tenant-shaped issuer, so we must match it here.
-      token.payload.iss = `${issuerInstance.url}/${config.tenantId}/v2.0`;
+      token.payload.iss = `${issuerInstance.url}/${config.tenantId!}/v2.0`;
     }
   });
 
@@ -33,7 +33,7 @@ export function createProvider(config: ProviderConfig) {
 
     const requestHandler =
       config.preset === 'azure-ad'
-        ? buildAzureAdHandler(service, config.tenantId)
+        ? buildAzureAdHandler(service, config.tenantId!)
         : service.requestHandler;
 
     if (config.preset === 'azure-ad') {
@@ -53,7 +53,7 @@ export function createProvider(config: ProviderConfig) {
 
     if (config.preset === 'azure-ad') {
       issuerInstance.url = baseUrl;
-      const issuer = `${baseUrl}/${config.tenantId}/v2.0`;
+      const issuer = `${baseUrl}/${config.tenantId!}/v2.0`;
       return { issuer, stop };
     }
 
